@@ -15,6 +15,7 @@ Buka `http://127.0.0.1:4173`. Dari menu utama, pilih **Buat lembah** atau **Gabu
 Progres otomatis tersimpan tiap aksi. Gunakan **Menu → Simpan sekarang** atau **Simpan & kembali**, lalu pilih **Muat permainan** dari layar judul untuk memilih karakter tersimpan di browser itu. Saat memuat, kamu melanjutkan keadaan lembah bersama yang terbaru.
 
 - Geser analog layar, gunakan **WASD** atau tombol panah, atau ketuk peta untuk berjalan. Tekan **E** atau ketuk tombol aksi untuk berinteraksi. Kamera mengikuti karakter dan menyesuaikan layar portrait atau landscape.
+- Di HP, game mencoba masuk layar penuh saat bermain. Buka **Menu** untuk Tas, Misi, Chat, Jelajah, pengaturan, dan tombol **Layar penuh** jika didukung Chrome. Buka **Profil** untuk melihat profesi, koin, energi, dan kenyang.
 - Pilih benih wortel, tomat, atau jagung di **Tanaman**. Karakter mencangkul saat menanam. Isi ember di sumur dan siram petak untuk memulai waktu tumbuh.
 - Rawat ayam, sapi, atau kambing di pagar masing-masing. Beri pakan dan minum sebelum memanen telur atau memerah susu. Dua induk dan dua pakan diperlukan untuk pembiakan. Ternak bisa mati setelah 8 menit tanpa pakan atau 6 menit tanpa minum selama permainan aktif. Waktu offline dan saat kembali ke judul dijeda.
 - Beli pakan seharga 4 koin di **Toko Pakan** dekat lumbung. Toko yang sama bisa meracik 1 jagung + 1 rumput liar menjadi 3 pakan, atau 3 rumput liar menjadi 1 pakan. Rumput bisa dipetik di tepi jalan, hutan, dan seberang sungai.

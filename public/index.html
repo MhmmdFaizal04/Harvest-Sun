@@ -24,7 +24,8 @@
     </section>
 
     <div id="hud" class="hud" hidden>
-      <div class="profile panel">
+      <button id="profile-toggle" class="quiet mobile-hud-toggle" type="button" aria-controls="player-profile" aria-expanded="false">Profil</button>
+      <div id="player-profile" class="profile panel">
         <div id="avatar" class="avatar" aria-hidden="true">♧</div>
         <div class="profile-text"><h2 id="player-name">Pendatang baru</h2><span id="role-name">Pilih profesi</span></div>
         <div class="gold" title="Koin"><span aria-hidden="true">◉</span> <strong id="gold">0</strong></div>
@@ -34,13 +35,16 @@
         </div>
       </div>
       <div class="world-time panel"><span id="weather" aria-hidden="true">☀</span><div><strong id="time">06.00</strong><small id="day">Hari 1</small></div></div>
-      <nav class="game-tools" aria-label="Panel permainan">
+      <button id="menu-toggle" class="quiet mobile-hud-toggle" type="button" aria-controls="game-tools" aria-expanded="false">Menu<span id="menu-chat-count" class="chat-count" hidden></span></button>
+      <nav id="game-tools" class="game-tools" aria-label="Panel permainan">
         <button class="quiet" data-panel="plants" aria-controls="plants" aria-expanded="false" type="button">Tanaman</button>
         <button class="quiet" data-panel="missions" aria-controls="missions" aria-expanded="false" type="button">Misi</button>
         <button class="quiet" data-panel="items" aria-controls="items" aria-expanded="false" type="button">Tas</button>
         <button class="quiet" data-panel="friends-panel" aria-controls="friends-panel" aria-expanded="false" type="button">Teman</button>
-        <button id="chat-tab" class="quiet" data-panel="chat-panel" aria-controls="chat-panel" aria-expanded="false" type="button">Chat<span id="chat-count" hidden></span></button>
-        <button id="help" class="quiet" type="button">Menu</button>
+        <button id="chat-tab" class="quiet" data-panel="chat-panel" aria-controls="chat-panel" aria-expanded="false" type="button">Chat<span id="chat-count" class="chat-count" hidden></span></button>
+        <button class="quiet mobile-menu-only" data-panel="explore-panel" aria-controls="explore-panel" aria-expanded="false" type="button">Jelajah</button>
+        <button id="help" class="quiet" type="button"><span class="desktop-menu-only">Menu</span><span class="mobile-menu-only">Pengaturan</span></button>
+        <button id="fullscreen" class="quiet mobile-menu-only" type="button">Layar penuh</button>
       </nav>
       <aside id="sidebar" class="sidebar" aria-label="Panel permainan">
         <section id="plants" class="panel" hidden>

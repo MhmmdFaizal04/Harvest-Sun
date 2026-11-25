@@ -8,6 +8,8 @@ const map = $("map");
 const ctx = map.getContext("2d");
 const lobby = $("lobby");
 const details = $("details");
+const hud=$("hud");
+const compactHud=matchMedia("(max-width:740px), (hover:none) and (pointer:coarse), (orientation:landscape) and (max-width:1000px) and (max-height:520px)");
 const shareCode = new URLSearchParams(location.search).get("join") || "";
 const storageKey = "harvest-sun-player";
 let session;
@@ -95,10 +97,30 @@ function accept(next, action) {
 }
 function updateScreen() {
   $("welcome").hidden=!showingTitle;
-  $("hud").hidden=showingTitle;
+  hud.hidden=showingTitle;
   $("start").textContent=state?"Lanjut bermain":"Buat lembah";
   $("new-game").hidden=!state;
   $("load").hidden=savedGames().length===0;
+}
+function setHudDrawer(name,open) {
+  hud.toggleAttribute(`data-${name}-open`,open);
+  $(`${name}-toggle`).setAttribute("aria-expanded",String(open));
+}
+function updateFullscreenButton() {
+  const control=$("fullscreen");
+  control.hidden=!document.fullscreenEnabled;
+  control.textContent=document.fullscreenElement?"Keluar layar penuh":"Layar penuh";
+}
+async function enterFullscreen() {
+  if (document.fullscreenElement) return true;
+  if (!document.fullscreenEnabled) return false;
+  try {
+    await document.documentElement.requestFullscreen({navigationUI:"hide"});
+    return true;
+  } catch { return false; }
+}
+function startMobileFullscreen() {
+  if (compactHud.matches) void enterFullscreen();
 }
 async function poll() {
   if (!session||busy||polling||moveFlight||moveQueue.length||document.hidden) return;
@@ -328,8 +350,7 @@ function syncChat(previous) {
     if (incoming.length&&panel.hidden) unreadChat+=incoming.length;
     if (incoming.length&&!showingTitle) playSound("chat");
   }
-  $("chat-count").hidden=unreadChat===0;
-  $("chat-count").textContent=unreadChat>9?"9+":unreadChat;
+  syncChatCount();
   log.replaceChildren(...messages.map(message=>{
     const row=node("li",undefined,message.sender===state.me.id?"chat-own":undefined);
     row.append(node("strong",message.sender===state.me.id?"Kamu":message.name),node("p",message.text));
@@ -337,6 +358,12 @@ function syncChat(previous) {
   }));
   if (!messages.length) log.append(node("li","Belum ada pesan. Sapa temanmu.","catalog-note"));
   if (nearBottom) log.scrollTop=log.scrollHeight;
+}
+function syncChatCount() {
+  for (const id of ["chat-count","menu-chat-count"]) {
+    $(id).hidden=unreadChat===0;
+    $(id).textContent=unreadChat>9?"9+":unreadChat;
+  }
 }
 function openLobby(joining=false) {
   if (lobby.open) return;
@@ -347,6 +374,10 @@ function openLobby(joining=false) {
   $("join-optional").hidden=joining;
   $("lobby-submit").textContent=joining?"Gabung lembah":"Buat lembah";
   lobby.showModal();
+}
+async function openLobbyFromTitle(joining=false) {
+  if (compactHud.matches) await enterFullscreen();
+  openLobby(joining);
 }
 function openSaves() {
   const controls=savedGames().map(save=>{
@@ -384,6 +415,7 @@ function activateGame(code,token,next) {
 }
 async function loadSave(save) {
   if (busy) return;
+  startMobileFullscreen();
   busy=true;
   writeVersion++;
   try {
@@ -815,6 +847,10 @@ function step() {
 }
 function clickMap(event) {
   if (!state || showingTitle) return;
+  if (compactHud.matches&&(hud.hasAttribute("data-menu-open")||hud.hasAttribute("data-profile-open")||$("sidebar").querySelector("section:not([hidden])"))) {
+    openPanel(null);
+    return;
+  }
   const rect=map.getBoundingClientRect();
   const x=Math.floor((camera.x+(event.clientX-rect.left)/camera.scale)/tile);
   const y=Math.floor((camera.y+(event.clientY-rect.top)/camera.scale)/tile);
@@ -862,6 +898,7 @@ $("join-code").addEventListener("input",()=>{ $("lobby-submit").textContent=$("j
 $("lobby-form").addEventListener("submit",async event=>{
   event.preventDefault();
   if ($("lobby-submit").disabled) return;
+  startMobileFullscreen();
   const form=new FormData(event.currentTarget);
   const code=String(form.get("code")).trim().toUpperCase();
   $("lobby-submit").disabled=true;
@@ -875,14 +912,15 @@ $("lobby-form").addEventListener("submit",async event=>{
   finally { $("lobby-submit").disabled=false; }
 });
 $("start").addEventListener("click",()=>{
-  if (!state) return openLobby();
+  if (!state) return openLobbyFromTitle();
+  startMobileFullscreen();
   showingTitle=false;
   updateScreen();
   playSound("welcome");
   act({action:"presence"});
 });
-$("join").addEventListener("click",()=>openLobby(true));
-$("new-game").addEventListener("click",()=>openLobby());
+$("join").addEventListener("click",()=>openLobbyFromTitle(true));
+$("new-game").addEventListener("click",()=>openLobbyFromTitle());
 $("load").addEventListener("click",openSaves);
 $("waypoint").addEventListener("click",()=>openPanel("explore-panel"));
 $("room").addEventListener("click",showInvite);
@@ -897,6 +935,7 @@ function showControls() {
 }
 $("help").addEventListener("click",()=>{
   centerStick();
+  if (compactHud.matches) openPanel(null);
   const actions=node("div",undefined,"menu-actions");
   const audioToggle=button(soundEnabled()?"Bisukan suara":"Nyalakan suara",()=>{
     setSound(!soundEnabled());
@@ -915,6 +954,8 @@ $("help").addEventListener("click",()=>{
 });
 const panelButtons=[...document.querySelectorAll("[data-panel]")];
 function openPanel(panel) {
+  setHudDrawer("menu",false);
+  setHudDrawer("profile",false);
   for (const candidate of panelButtons) {
     const showPanel=candidate.dataset.panel===panel;
     candidate.setAttribute("aria-expanded",String(showPanel));
@@ -922,12 +963,38 @@ function openPanel(panel) {
   }
   if (panel==="chat-panel") {
     unreadChat=0;
-    $("chat-count").hidden=true;
+    syncChatCount();
     $("chat-log").scrollTop=$("chat-log").scrollHeight;
   }
   if (panel==="explore-panel"&&state) drawOverview($("overview").getContext("2d"),state,waypoint);
 }
-for (const control of panelButtons) control.addEventListener("click",()=>openPanel(control.getAttribute("aria-expanded")==="false"?control.dataset.panel:null));
+for (const control of panelButtons) control.addEventListener("click",()=>{
+  const panel=control.getAttribute("aria-expanded")==="false"?control.dataset.panel:null;
+  openPanel(panel);
+  if (panel&&compactHud.matches&&control.closest("#game-tools")) {
+    const heading=$(panel).querySelector("h2");
+    heading.tabIndex=-1;
+    heading.focus({preventScroll:true});
+  }
+});
+for (const name of ["menu","profile"]) {
+  $(`${name}-toggle`).addEventListener("click",()=>{
+    const opening=!hud.hasAttribute(`data-${name}-open`);
+    openPanel(null);
+    setHudDrawer(name,opening);
+  });
+}
+$("fullscreen").addEventListener("click",async()=>{
+  openPanel(null);
+  if (document.fullscreenElement) {
+    await document.exitFullscreen().catch(()=>{});
+  } else if (!await enterFullscreen()) {
+    notice("Layar penuh belum tersedia di browser ini.");
+  }
+  updateFullscreenButton();
+});
+document.addEventListener("fullscreenchange",updateFullscreenButton);
+updateFullscreenButton();
 $("chat-form").addEventListener("submit",async event=>{
   event.preventDefault();
   const field=$("chat-text"), send=$("chat-send");
