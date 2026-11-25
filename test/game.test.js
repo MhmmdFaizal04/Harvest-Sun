@@ -312,6 +312,18 @@ test("two players share a world while inventories and mission claims stay isolat
   assert.equal(firstLoss.state.herd.chicken,1);
   assert.equal((await playUntil(careLimits.water+careLossInterval-1)).state.me.ranch.chicken.count,1);
   assert.equal((await playUntil(careLimits.water+careLossInterval)).state.me.ranch.chicken.count,0);
+
+  const walker=await request({action:"create",name:"Uji Gerak",role:"farmer"});
+  const {x,y}=walker.state.me;
+  const from={x,y,area:"outside"};
+  const forward=[[x,y+1],[x,y+2],[x,y+3]];
+  assert.equal((await request({action:"move",from,path:forward},walker)).state.me.y,y+3);
+  assert.equal((await request({action:"move",from,path:[[x,y+2]]},walker)).status,409);
+  const back=[[x,y+2],[x,y+1],[x,y]];
+  assert.equal((await request({action:"move",from:{...from,y:y+3},path:back},walker)).state.me.y,y);
+  assert.equal((await request({action:"move",from,path:forward},walker)).status,429);
+  current+=95;
+  assert.equal((await request({action:"move",from,path:forward},walker)).state.me.y,y+3);
 });
 
 test("the shared clock crosses dusk and midnight",()=>{

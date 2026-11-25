@@ -1,4 +1,7 @@
 export const width=54, height=32, tile=28;
+export const maxMoveBatch=8;
+export const moveInterval=128;
+export const serverMoveInterval=95;
 export const roles = {
   farmer: { label: "Petani", icon: "♧", color: "#a6be62", detail: "Tanam, siram, dan panen lebih banyak.", goal: "Panen 3 tanaman", metric: "harvest", target: 3 },
   rancher: { label: "Peternak", icon: "♘", color: "#e8ad69", detail: "Rawat ternak untuk mengumpulkan lebih banyak telur dan susu.", goal: "Kumpulkan 3 telur", metric: "eggs", target: 3 },

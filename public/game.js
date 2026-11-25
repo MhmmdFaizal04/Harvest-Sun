@@ -1,4 +1,4 @@
-import { animalCare, areaOf, buildings, buyPrices, calendar, careHeartbeatLimit, crops, development, discoveries, distance, feedRecipes, foods, forage, height, houses, indoorPlaces, insideFootprint, items, livestock, marketNpc, nearbyLandmark, openPlot, pens, places, plots, ranchLimit, regionAt, roles, sameArea, sellPrices, tile, trailPlots, treeRegrow, walkable, width, woodlots, workTime } from "./world.js";
+import { animalCare, areaOf, buildings, buyPrices, calendar, careHeartbeatLimit, crops, development, discoveries, distance, feedRecipes, foods, forage, height, houses, indoorPlaces, insideFootprint, items, livestock, marketNpc, maxMoveBatch, moveInterval, nearbyLandmark, openPlot, pens, places, plots, ranchLimit, regionAt, roles, sameArea, sellPrices, tile, trailPlots, treeRegrow, walkable, width, woodlots, workTime } from "./world.js";
 import { drawOverview, paint } from "./map.js";
 import { rememberGame, savedGames } from "./saves.js";
 import { playSound, setSound, soundEnabled, unlockSound } from "./sound.js";
@@ -6,10 +6,6 @@ import { playSound, setSound, soundEnabled, unlockSound } from "./sound.js";
 const $ = id => document.getElementById(id);
 const map = $("map");
 const ctx = map.getContext("2d");
-const scene = document.createElement("canvas");
-scene.width=width*tile;
-scene.height=height*tile;
-const sceneContext=scene.getContext("2d");
 const lobby = $("lobby");
 const details = $("details");
 const shareCode = new URLSearchParams(location.search).get("join") || "";
@@ -19,12 +15,16 @@ try { session = JSON.parse(localStorage.getItem(storageKey)); } catch { session 
 let state, moveTarget, pendingInteraction, displayedPosition, toastTimer, detailType, lastHud;
 let landmarkId=null, landmarkTimer;
 let busy=false, polling=false, writeVersion=0, nextMove=0, showingTitle=true;
+const moveQueue=[];
+let moveFlight=null, recovering=false, interacting=false, routeCache=null;
+let lastFrame;
 let stickPointer=null, analog=null;
 const camera={x:0,y:0,scale:1,w:1,h:1,dpr:1,area:null};
 const keys = new Set();
 const moves = { w:[0,-1], arrowup:[0,-1], a:[-1,0], arrowleft:[-1,0], s:[0,1], arrowdown:[0,1], d:[1,0], arrowright:[1,0] };
 let selectedCrop="carrot", giftRecipient, unreadChat=0, lastStep=0, waypoint, ranchSpecies="chicken", tradeMode="sell";
 const canGive=(me,friend)=>sameArea(me,friend)&&distance(me,friend)<=2;
+const localPlayer=()=>displayedPosition ? {...state.me,...displayedPosition} : state?.me;
 
 function node(tag, text, className) {
   const result = document.createElement(tag);
@@ -45,7 +45,7 @@ function notice(message) {
 }
 function updateLandmarkPopup() {
   const popup=$("landmark-popup");
-  const landmark=state&&!showingTitle ? nearbyLandmark(state) : null;
+  const landmark=state&&!showingTitle ? nearbyLandmark({...state,me:localPlayer()}) : null;
   const id=landmark?.id??null;
   if (landmarkId===id) return;
   landmarkId=id;
@@ -77,6 +77,7 @@ function accept(next, action) {
     moveTarget=null;
     pendingInteraction=null;
     displayedPosition=null;
+    moveQueue.length=0;
     keys.clear();
     centerStick();
   }
@@ -100,13 +101,16 @@ function updateScreen() {
   $("load").hidden=savedGames().length===0;
 }
 async function poll() {
-  if (!session || busy || polling || document.hidden) return;
+  if (!session||busy||polling||moveFlight||moveQueue.length||document.hidden) return;
   const version = writeVersion;
   const current = session;
   polling = true;
   try {
     const {state: next} = await api();
-    if (version === writeVersion && current === session) accept(next);
+    if (version===writeVersion&&current===session&&!moveQueue.length) {
+      accept(next);
+      recovering=false;
+    }
   } catch (error) {
     if (version === writeVersion && current === session) {
       connection("Menyambung ulang",true);
@@ -120,12 +124,64 @@ async function poll() {
     }
   } finally { polling = false; }
 }
+async function sendMovement(path,from,current) {
+  writeVersion++;
+  try {
+    const reply=await api({action:"move",path,from},current);
+    if (current!==session) return false;
+    if (!moveQueue.length) displayedPosition=null;
+    accept(reply.state);
+    if (reply.message) notice(reply.message);
+    return true;
+  } catch (error) {
+    if (current!==session) return false;
+    moveQueue.length=0;
+    displayedPosition=null;
+    moveTarget=null;
+    pendingInteraction=null;
+    routeCache=null;
+    recovering=true;
+    connection("Menyinkronkan posisi",true);
+    try {
+      const reply=await api(undefined,current);
+      if (current===session) {
+        accept(reply.state);
+        recovering=false;
+      }
+    } catch {
+      // The normal polling loop will refresh the position when the connection returns.
+    }
+    if (error.status===426) notice(error.message);
+    return false;
+  }
+}
+function flushMovement() {
+  if (moveFlight) return moveFlight.done;
+  if (!moveQueue.length||recovering) return Promise.resolve(!recovering);
+  const path=moveQueue.splice(0,maxMoveBatch);
+  const {x,y}=state.me;
+  const flight={count:path.length,done:null};
+  moveFlight=flight;
+  flight.done=sendMovement(path,{x,y,area:areaOf(state.me)},session).finally(()=>{
+    if (moveFlight!==flight) return;
+    moveFlight=null;
+    if (moveQueue.length>=maxMoveBatch) void flushMovement();
+  });
+  return flight.done;
+}
+async function settleMovement() {
+  while (moveFlight||moveQueue.length) if (!await flushMovement()) return false;
+  return !recovering;
+}
 async function act(input) {
   if (!state || busy) return false;
   busy = true;
-  writeVersion++;
+  const current=session;
   try {
-    const reply = await api(input);
+    if (!await settleMovement()||current!==session) return false;
+    writeVersion++;
+    const reply=await api(input,current);
+    if (current!==session) return false;
     accept(reply.state,input.action);
     if (reply.message) notice(reply.message);
     return true;
@@ -257,10 +313,7 @@ function showGains(previous,next,action) {
   }
   if (unlocked||restored||action==="claim"||action==="discover") playSound("reward");
   else if (gains.length||coins>0) playSound("item");
-  else if (action==="move"&&performance.now()-lastStep>460) {
-    playSound("step");
-    lastStep=performance.now();
-  } else if (action==="enter"||action==="exit") playSound("door");
+  else if (action==="enter"||action==="exit") playSound("door");
   else if (["plot","feed","drink","well"].includes(action)&&!gains.length) playSound("work");
 }
 function syncChat(previous) {
@@ -319,6 +372,10 @@ function activateGame(code,token,next) {
   moveTarget=null;
   pendingInteraction=null;
   displayedPosition=null;
+  moveQueue.length=0;
+  moveFlight=null;
+  routeCache=null;
+  recovering=false;
   camera.area=null;
   openPanel(null);
   showingTitle=false;
@@ -465,10 +522,12 @@ function updateWaypoint() {
   const control=$("waypoint"), site=discoveries[waypoint];
   control.hidden=!site||areaOf(state?.me)!=="outside";
   if (control.hidden) return;
-  const dx=site.x-state.me.x,dy=site.y-state.me.y;
+  const player=localPlayer();
+  const dx=site.x-player.x,dy=site.y-player.y;
   const directions=["Timur","Tenggara","Selatan","Barat Daya","Barat","Barat Laut","Utara","Timur Laut"];
   const heading=directions[(Math.round(Math.atan2(dy,dx)*4/Math.PI)+8)%8];
-  control.textContent=`${site.region} · ${heading} · ${distance(site,state.me)} petak`;
+  const label=`${site.region} · ${heading} · ${distance(site,player)} petak`;
+  if (control.textContent!==label) control.textContent=label;
 }
 function renderVillage() {
   const town=state.village;
@@ -663,9 +722,15 @@ function targetLabel(target) {
   }
   return target.label;
 }
-function interact(target = nearest(state?.me)) {
-  if (!state || busy) return;
+async function interact(target=nearest(localPlayer())) {
+  if (!state||busy||interacting) return;
   if (!target) { notice("Dekati kebun, rumah, kandang, pasar, atau lumbung."); return; }
+  interacting=true;
+  try {
+    if (await settleMovement()) interactAt(target);
+  } finally { interacting=false; }
+}
+function interactAt(target) {
   if (target.type==="plot") {
     const plot=plots[target.plot];
     if (!openPlot(plot,state.village,state.exploration)) return openPanel(plot.trail?"explore-panel":"missions");
@@ -686,6 +751,7 @@ function interact(target = nearest(state?.me)) {
 function findPath(from, goal, radius) {
   const area=areaOf(from);
   const repaired=Boolean(state.exploration.restoredAt);
+  const now=timeNow();
   const parents = new Map();
   const start = from.y*width+from.x;
   const queue = [start];
@@ -699,7 +765,7 @@ function findPath(from, goal, radius) {
     }
     for (const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]]) {
       const nx=x+dx,ny=y+dy,next=ny*width+nx;
-      if (walkable(nx,ny,area,repaired,state.felled,state.now) && !parents.has(next)) {
+      if (walkable(nx,ny,area,repaired,state.felled,now)&&!parents.has(next)) {
         parents.set(next,id);
         queue.push(next);
       }
@@ -707,9 +773,10 @@ function findPath(from, goal, radius) {
   }
   return null;
 }
-async function step() {
-  if (!state || showingTitle || busy || details.open || lobby.open || performance.now()<nextMove) return;
-  const p=state.me;
+function step() {
+  if (!state||showingTitle||busy||interacting||recovering||details.open||lobby.open||performance.now()<nextMove) return;
+  if (moveQueue.length+(moveFlight?.count??0)>=maxMoveBatch*2) return;
+  const p=localPlayer();
   if (p.work&&timeNow()-p.work.at<workTime) return;
   const direction=[...keys].findLast(key=>moves[key]);
   let destination;
@@ -720,7 +787,8 @@ async function step() {
     destination=[p.x+dx,p.y+dy];
   } else if (moveTarget) {
     const radius=pendingInteraction?.type==="plot" ? 0 : pendingInteraction?.radius || 0;
-    const route=findPath(p,moveTarget,radius);
+    if (routeCache?.target!==moveTarget) routeCache={target:moveTarget,path:findPath(p,moveTarget,radius)};
+    const route=routeCache.path;
     if (!route?.length) {
       const target=pendingInteraction;
       moveTarget=null;
@@ -729,15 +797,21 @@ async function step() {
       if (!route) notice("Tidak ada jalan ke lokasi itu.");
       return;
     }
-    [destination]=route;
+    destination=route.shift();
   }
-  if (!destination||!walkable(...destination,areaOf(p),Boolean(state.exploration.restoredAt),state.felled,timeNow())) return;
+  if (!destination) return;
+  if (!walkable(...destination,areaOf(p),Boolean(state.exploration.restoredAt),state.felled,timeNow())) {
+    routeCache=null;
+    return;
+  }
   const [x,y]=destination;
-  nextMove=performance.now()+128;
+  nextMove=performance.now()+moveInterval;
   displayedPosition={x,y,dir:x<p.x?"left":x>p.x?"right":y<p.y?"up":"down"};
-  const moved=await act({action:"move",path:[destination]});
-  displayedPosition=null;
-  if (!moved) {moveTarget=null;pendingInteraction=null;}
+  moveQueue.push(destination);
+  if (performance.now()-lastStep>460) {
+    playSound("step");
+    lastStep=performance.now();
+  }
 }
 function clickMap(event) {
   if (!state || showingTitle) return;
@@ -943,13 +1017,14 @@ function follow(center,size,low,high) {
   return Math.max(low,Math.min(high-size,center-size/2));
 }
 function frame(t) {
-  paint(sceneContext,state,moveTarget,t,displayedPosition);
+  const frameTime=lastFrame==null?1000/60:Math.min(t-lastFrame,50);
+  lastFrame=t;
   const player=displayedPosition || state?.me || {x:16,y:11};
   const area=areaOf(state?.me);
   const house=area==="house";
-  const x=follow((player.x+.5)*tile,camera.w/camera.scale,house?6*tile:0,house?28*tile:scene.width);
-  const y=follow((player.y+.65)*tile,camera.h/camera.scale,house?3*tile:0,house?18*tile:scene.height);
-  const ease=camera.area!==area?1:.16;
+  const x=follow((player.x+.5)*tile,camera.w/camera.scale,house?6*tile:0,house?28*tile:width*tile);
+  const y=follow((player.y+.65)*tile,camera.h/camera.scale,house?3*tile:0,house?18*tile:height*tile);
+  const ease=camera.area!==area?1:1-Math.pow(.84,frameTime*60/1000);
   camera.x+=(x-camera.x)*ease;
   camera.y+=(y-camera.y)*ease;
   camera.area=area;
@@ -957,7 +1032,9 @@ function frame(t) {
   ctx.imageSmoothingEnabled=false;
   ctx.fillStyle=house?"#312821":"#263a29";
   ctx.fillRect(0,0,camera.w,camera.h);
-  ctx.drawImage(scene,Math.round(-camera.x*camera.scale),Math.round(-camera.y*camera.scale),scene.width*camera.scale,scene.height*camera.scale);
+  const zoom=camera.dpr*camera.scale;
+  ctx.setTransform(zoom,0,0,zoom,Math.round(-camera.x*zoom),Math.round(-camera.y*zoom));
+  paint(ctx,state,moveTarget,t,displayedPosition,frameTime);
   requestAnimationFrame(frame);
 }
 syncHud();
@@ -967,7 +1044,7 @@ new ResizeObserver(resize).observe(map);
 if (shareCode && shareCode!==session?.code) openLobby(true);
 if (session) poll();
 setInterval(poll,1300);
-setInterval(()=>{ if (state && !showingTitle && !document.hidden) act({action:"presence"}); },12000);
+setInterval(()=>{ if (state&&!showingTitle&&!document.hidden&&!moveFlight&&!moveQueue.length) act({action:"presence"}); },12000);
 function pauseCare() {
   if (!session||showingTitle) return;
   void fetch(`/api/game?room=${encodeURIComponent(session.code)}`,{
@@ -981,10 +1058,12 @@ document.addEventListener("visibilitychange",()=>{
 });
 window.addEventListener("pagehide",pauseCare);
 setInterval(step,32);
+setInterval(flushMovement,240);
 setInterval(()=>{
   clock();
   updateLandmarkPopup();
-  const target=nearest(state?.me);
+  updateWaypoint();
+  const target=nearest(localPlayer());
   $("hint").hidden=!target;
   $("hint").textContent=target ? targetLabel(target) : "";
   if (detailType==="ranch"&&details.open) updateRanchTimers();

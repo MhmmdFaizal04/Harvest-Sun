@@ -1,4 +1,4 @@
-import { areaOf, bridgeRows, buildings, calendar, crops, development, discoveries, distance, forage, height, insideFootprint, marketNpc, openPlot, pens, places, plots, riverStart, roles, sameArea, tile, treeRegrow, trees, waterAt, width, woodlots, workTime } from "./world.js";
+import { areaOf, bridgeRows, buildings, calendar, crops, development, discoveries, distance, forage, height, insideFootprint, marketNpc, moveInterval, openPlot, pens, places, plots, riverStart, roles, sameArea, tile, treeRegrow, trees, waterAt, width, woodlots, workTime } from "./world.js";
 
 const terrain = document.createElement("canvas");
 terrain.width = width * tile;
@@ -229,7 +229,7 @@ function paintHouse(ctx) {
   if (image) ctx.drawImage(image.image,6*tile,3*tile,22*tile,15*tile);
   else box(ctx,"#946941",6*tile,3*tile,22*tile,15*tile);
 }
-export function paint(ctx,state,selection,t,localPosition=null) {
+export function paint(ctx,state,selection,t,localPosition=null,frameTime=1000/60) {
   const level=state?.village?.level||0;
   const exploration=state?.exploration;
   const repaired=Boolean(exploration?.restoredAt);
@@ -299,8 +299,13 @@ export function paint(ctx,state,selection,t,localPosition=null) {
   for (const p of players.sort((a,b)=>a.y-b.y)) {
     const targetX=(p.x+.5)*tile,targetY=(p.y+.8)*tile;
     const pos=positions.get(p.id)||{x:targetX,y:targetY};
-    const moving=Math.hypot(pos.x-targetX,pos.y-targetY)>1.2;
-    pos.x+=(targetX-pos.x)*(reduced?1:.24); pos.y+=(targetY-pos.y)*(reduced?1:.24);
+    const separation=Math.hypot(pos.x-targetX,pos.y-targetY);
+    const moving=separation>1.2;
+    const ease=1-Math.pow(.76,frameTime*60/1000);
+    const remote=p.id!==state?.me.id;
+    const rate=reduced||separation>tile*12 ? 1 : remote&&moving ? Math.min(ease,tile*frameTime*1.2/(separation*moveInterval)) : ease;
+    pos.x+=(targetX-pos.x)*rate;
+    pos.y+=(targetY-pos.y)*rate;
     if (p.work&&pos.workAt!==p.work.at) {
       pos.workAt=p.work.at;
       pos.workDrawnAt=now-p.work.at<=2000?now:p.work.at;

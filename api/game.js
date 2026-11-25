@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
-import { animalCare, areaOf, buyPrices, calendar, careHeartbeatLimit, careLossInterval, crops, development, discoveries, distance, feedRecipes, foods, forage, forageTime, houses, indoorPlaces, items, livestock, marketNpc, openPlot, places, plots, ranchLimit, roles, sameArea, sellPrices, treeRegrow, walkable, waterCapacity, woodlots } from "../public/world.js";
+import { animalCare, areaOf, buyPrices, calendar, careHeartbeatLimit, careLossInterval, crops, development, discoveries, distance, feedRecipes, foods, forage, forageTime, houses, indoorPlaces, items, livestock, marketNpc, maxMoveBatch, openPlot, places, plots, ranchLimit, roles, sameArea, sellPrices, serverMoveInterval, treeRegrow, walkable, waterCapacity, woodlots } from "../public/world.js";
 
 const redisUrl = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
 const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
@@ -152,8 +152,13 @@ function playerAction(room, player, input, now) {
   const animate=(kind,target)=>{ player.work={kind,at:now,left:target.x<player.x}; };
   switch (action) {
     case "move": {
-      requireGame(Array.isArray(input.path) && input.path.length <= 8 && input.path.length > 0, "Langkah tidak valid.");
-      requireGame(now - player.moved >= input.path.length * 95, "Kamu bergerak terlalu cepat.", 429);
+      requireGame(Array.isArray(input.path)&&input.path.length<=maxMoveBatch&&input.path.length>0,"Langkah tidak valid.");
+      if (input.from) {
+        requireGame(input.from.x===player.x&&input.from.y===player.y&&input.from.area===area,"Posisi berubah. Menyinkronkan ulang.",409);
+      }
+      const allowance=Math.min(maxMoveBatch*serverMoveInterval,(player.moveCredit??0)+Math.max(0,now-(player.moved??0)));
+      const cost=input.path.length*serverMoveInterval;
+      requireGame(allowance>=cost,"Kamu bergerak terlalu cepat.",429);
       for (const step of input.path) {
         requireGame(Array.isArray(step) && step.length === 2 && step.every(Number.isInteger), "Langkah tidak valid.");
         const [x,y] = step;
@@ -161,7 +166,8 @@ function playerAction(room, player, input, now) {
         player.dir = x < player.x ? "left" : x > player.x ? "right" : y < player.y ? "up" : "down";
         Object.assign(player, { x,y });
       }
-      player.moved = now;
+      player.moveCredit=allowance-cost;
+      player.moved=Math.max(player.moved??0,now);
       return "";
     }
     case "well":
