@@ -1,0 +1,20 @@
+{
+  "states": {
+    "hoe": {
+      "frames": 4, "fps": 6, "loop": false,
+      "action": "Hoe a crop bed just in front of the farmer's own boots. Pose 1 holds a small wooden-handled garden hoe upright, pose 2 lifts it, pose 3 bends forward and pulls the metal blade down close to the ground, pose 4 recovers. Show the tool connected to the hands in every pose. Keep the same three-quarter front view, simple stable limbs, and feet grounded. No ground or separate effects."
+    },
+    "feed": {
+      "frames": 4, "fps": 6, "loop": false,
+      "action": "Feed farm animals with a small ochre grain pouch held in both hands. Pose 1 lifts the pouch to chest, pose 2 steadies and tips it diagonally, pose 3 tips farther and leans forward, pose 4 brings the pouch upright again. No animal, particles, text or ground. Same subject and side of the pouch throughout."
+    },
+    "chop": {
+      "frames": 4, "fps": 6, "loop": false,
+      "action": "Gather firewood: hold the same short woodcutting hatchet in both hands next to the farmer, lift in a windup, swing it diagonally down towards an offscreen tree at waist height, then stand and recover. Clear, sequential poses from the same readable three-quarter front view. No tree, background, sparks or wood fragments. Keep all hats, feet and the tool fully inside each pose's cell."
+    },
+    "water": {
+      "frames": 4, "fps": 6, "loop": false,
+      "action": "Pour well water from the same small teal watering can. Carry it beside the torso, bring it forward, tilt the spout down toward the ground, bring it upright again. One integrated can and full-body figure in each pose. No detached effects or floor. Same stable front three-quarter view."
+    }
+  }
+}

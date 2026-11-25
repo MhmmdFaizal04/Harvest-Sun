@@ -1,0 +1,10 @@
+{
+  "states": {
+    "down_idle": { "frames": 4, "fps": 4, "loop": true, "action": "Subtle idle breathing and one blink with both boots planted." },
+    "down_walk": { "frames": 4, "fps": 8, "loop": true, "action": "Four poses of a purposeful repeating walk towards the viewer. Alternate feet clearly through left contact, passing, right contact, passing. Entire character remains centered." },
+    "side_idle": { "frames": 4, "fps": 4, "loop": true, "action": "Calm profile idle, feet planted." },
+    "side_walk": { "frames": 4, "fps": 8, "loop": true, "action": "Four equally spaced profile cycle poses. Leading right foot, passing, leading left foot, passing. Same baseline and height for all silhouettes." },
+    "up_idle": { "frames": 4, "fps": 4, "loop": true, "action": "Quiet rear-view idle with a tiny shoulder lift." },
+    "up_walk": { "frames": 4, "fps": 8, "loop": true, "action": "Character walking away; alternating clearly visible forward steps, unchanged scale, feet align to shared baseline." }
+  }
+}
